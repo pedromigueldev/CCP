@@ -9,44 +9,29 @@
 #include <string.h>
 #include "./mstr.h"
 
-int mfile_mkdir_tryfail(char* where, char* project_name, char** path) {
-	if (project_name == NULL) {
-		*path = strdup("A project name was not provided!\n");
+#define ENSURE_NOT_NULL(ptr)                  \
+    do {                                      \
+        if ((ptr) == NULL) {                  \
+            fprintf(stderr, "Error message not defined on error branch %s:%d\n",__FILE__, __LINE__);\
+            exit(EXIT_FAILURE);               \
+        }                                     \
+    } while (0)
+    
+#define take_ptr(ptr)                    \
+    ({                                   \
+        ENSURE_NOT_NULL(ptr);            \
+        ptr;                             \
+    })
+    
+#define catch(fun, error, ...)                                                   \
+    for (char *(error) = NULL, *__a = NULL; __a == NULL; __a = (char*)1) if(fun##_tryfail(&(error), __VA_ARGS__) && take_ptr((error)))
+
+int mfile_mkdir_path_tryfail(char** error, char* path) {
+    if (mkdir(path, 0755) == -1) {
+        *error = strerror(errno);
         return 1;
     }
     
-    char newProjectFile[PATH_MAX];
-    
-    if (where != NULL) {
-    	char *rpath = realpath(where, NULL);
-        if (!rpath) {
-            *path = strerror(errno);
-            return 1;
-        }
-		
-        if (snprintf(newProjectFile, PATH_MAX, "%s/%s", rpath, project_name) >= PATH_MAX) {
-             *path = strdup("Path was too long\n");
-             return 1;
-         }
-    } else {
-   		char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) == NULL) {
-            *path = strerror(errno);
-            return 1;
-        }
-    
-        if (snprintf(newProjectFile, PATH_MAX, "%s/%s", cwd, project_name) >= PATH_MAX) {
-            *path = strdup("Path was too long\n");
-            return 1;
-        }
-    }
-
-    if (mkdir(newProjectFile, 0755) == -1) {
-        *path = strerror(errno);
-        return 1;
-    }
-
-    *path = strdup(newProjectFile);
     return 0;
 }
 

@@ -7,12 +7,36 @@ int main(int argc, char** argv) {
     	return 1;
     }
 	   
-	char* path = NULL;
+    char path[PATH_MAX];
     char* project_name = argv[1];
-   	char* where = argc >= 3 ? argv[2] : NULL;
-	
-	if (mfile_mkdir_tryfail(where, project_name, &path)) {
-		fprintf(stderr, "Error: %s\n", path);
+   	char* where = argc >= 3 ? argv[2] : nullptr;
+    
+    if (where) {
+    	char *rpath = realpath(where, NULL);
+        if (!rpath) {
+            perror("realpath");
+            return 1;
+        }
+		
+        if (snprintf(path, PATH_MAX, "%s/%s", rpath, project_name) >= PATH_MAX) {
+             fprintf(stderr, "Path was too long\n");
+             return 1;
+         }
+    } else {
+   		char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) == NULL) {
+            perror("cwd");
+            return 1;
+        }
+    
+        if (snprintf(path, PATH_MAX, "%s/%s", cwd, project_name) >= PATH_MAX) {
+        	fprintf(stderr, "Path was too long\n");
+            return 1;
+        }
+    }
+    
+	catch(mfile_mkdir_path, error, path) {
+		fprintf(stderr, "Error: %s\n", error);
 		return 1;
 	}
 	
