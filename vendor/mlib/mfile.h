@@ -34,36 +34,6 @@ int mfile_mkdir_path_tryfail(char** error, char* path) {
     
     return 0;
 }
-
-int create_directory_tryfail(int argc, char** argv, char** path) {
-	if (argc < 2) {
-		*path = strdup("Not enough arguments\n");
-        return 1;
-    }
-    char* project_name = argv[1];
-    char cwd[PATH_MAX];
-    char newProjectFile[PATH_MAX];
-    
-    if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        *path = strerror(errno);
-        return 1;
-    }
-
-    if (snprintf(newProjectFile, sizeof(newProjectFile), "%s/%s", cwd, project_name) >= sizeof(newProjectFile)) {
-        *path = strdup("Path too long\n");
-        return 1;
-    }
-
-    if (mkdir(newProjectFile, 0755) == -1) {
-        *path = strerror(errno);
-        return 1;
-    }
-
-    *path = strdup(newProjectFile);
-    return 0;
-}
-
-
 int read_file_tryfail (const char* filename, Mstr* buffer_out) {
 	FILE* file = fopen(filename, "rb");
 	
