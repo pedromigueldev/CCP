@@ -6,7 +6,7 @@ It creates a project folder with a basic structure, starter `main.c`, and custom
 ## Goals
 
 * [x] Create project folder
-* [ ] Generate a basic `main.c`
-* [ ] Create a `vendor` folder for single header files
-* [ ] Provide command-line arguments to configure the `Makefile`
-
+* [x] Generate a basic `main.c`
+* [x] Create a `vendor` folder for single header files
+* [x] Generate `Makefile`
+* [ ] Provide comand line args for custom makefile
