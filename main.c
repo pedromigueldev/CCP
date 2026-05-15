@@ -7,12 +7,10 @@ int create_mainc_tryfail(char** out_buffer, char* path);
 int main(int argc, char** argv) {
     char* project_name = argv[1] ? argv[1] : nullptr;
    	char* project_path = argv[2] ? argv[2] : nullptr;
-    char path[PATH_MAX];
+    char* path = NULL;
 
-    if (project_path && project_name) 
-    	snprintf(path, PATH_MAX, "%s/%s", project_path, project_name); 
-    else if (project_name) 
-    	snprintf(path, PATH_MAX, "./%s", project_name);
+    if (project_name)
+    	path = MPRINT_FMT_OUT($(project_path != NULL ? project_path : ".")"/"$(project_name));
     else {
   		fprintf(stderr, "Ussage: <program-name> [project_path] [..flags]\n");
     	return 1;
@@ -38,6 +36,7 @@ int main(int argc, char** argv) {
 	printf("Project at '%s' created successfully.\n", path_out);
    	free(makefile);
    	free(path_out);
+   	free(path);
 	return 0;
 }
 
