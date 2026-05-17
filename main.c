@@ -1,34 +1,9 @@
 #include <stdio.h>
 #include "vendor/mlib/mfile.h"
+#include "vendor/mlib/marr.h"
+
 #define NL "\n"
-
-#include <stdlib.h>  /* for free() */
-#include <stdio.h>   /* for fopen(), fclose() */
-
-/**
-	Inspired by linux kernels cleanup.h
-*/
-#define __cleanup(func) __attribute__((__cleanup__(func)))
-static inline __attribute__((__must_check__)) void *__must_check_ptr(void *p) {
-    return p;
-}
-#define no_free_ptr(p) __must_check_ptr(({ \
-    __auto_type __ptr = (p); \
-    (p) = NULL; \
-    __ptr; \
-}))
-#define DEFINE_FREE(name, type, free_func) \
-    static inline void __free_##name(void *p) { \
-        type _T = *(type *)p; \
-        if (_T) \
-            free_func(_T); \
-    }    
-#define __free(name) __cleanup(__free_##name)
-/**
-	Inspired by linux kernels cleanup.h :)
-*/
-
-DEFINE_FREE(strfree, char*, free);
+DEFINE_FREE(charPtrFree, char*, free);
 
 char* create_mainc_buffer () {
 	return MPRINT_FMT_OUT(
@@ -58,7 +33,7 @@ char* create_makefile_buffer (char* project_name) {
 int main(int argc, char** argv) {
     char* project_name = argv[1] ? argv[1] : nullptr;
    	char* project_path = argv[2] ? argv[2] : nullptr;
-    char* path __free(strfree) = NULL;
+    char* path __free(charPtrFree) = NULL;
 
     if (project_name)
     	path = MPRINT_FMT_OUT($(project_path != NULL ? project_path : ".")"/"$(project_name));
@@ -73,15 +48,15 @@ int main(int argc, char** argv) {
 	}
    	
 	char* out = NULL;	
-	char* makefile __free(strfree) = create_makefile_buffer(project_name);
-	char* makefilePath __free(strfree) = MPRINT_FMT_OUT($(path)"/makefile");
+	char* makefile __free(charPtrFree) = create_makefile_buffer(project_name);
+	char* makefilePath __free(charPtrFree) = MPRINT_FMT_OUT($(path)"/makefile");
 	catch(mfile_create, &out, makefilePath, makefile) {
 		fprintf(stderr, "makefile: %s\n", unwrap_fail(out));
 		return 1;
 	};
 
-   	char* mainc __free(strfree) = create_mainc_buffer();
-  	char* maincPath __free(strfree) = MPRINT_FMT_OUT($(path)"/main.c");
+   	char* mainc __free(charPtrFree) = create_mainc_buffer();
+  	char* maincPath __free(charPtrFree) = MPRINT_FMT_OUT($(path)"/main.c");
    	catch(mfile_create,	&out, maincPath, mainc) {
    		fprintf(stderr, "main: %s\n", unwrap_fail(out));
    		return 1;
