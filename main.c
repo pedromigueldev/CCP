@@ -34,7 +34,7 @@ char* create_mainc_buffer () {
 	return MPRINT_FMT_OUT(
 		"#include <stdio.h>			"NL
 		"int main(void) {			"NL
-		"	printf(\"Hello world\") "NL
+		"	printf(\"Hello world\");"NL
 		"	return 0;				"NL
 		"}							"NL
 	);
