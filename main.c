@@ -1,12 +1,12 @@
-#include <stdio.h>
+#include <stdbool.h>
 #include "vendor/mlib/mfile.h"
-#include "vendor/mlib/marr.h"
+#include "vendor/mlib/mvector.h"
+#include "vendor/mlib/mstr.h"
+#include "vendor/mlib/mprint.h"
 
 #define NL "\n"
-DEFINE_FREE(charPtrFree, char*, free);
-
-char* create_mainc_buffer () {
-	return MPRINT_FMT_OUT(
+MstrView create_mainc_buffer (MVecParamDefPtr(*pool, char)) {
+	return MStrFmt(pool,
 		"#include <stdio.h>			"NL
 		"int main(void) {			"NL
 		"	printf(\"Hello world\");"NL
@@ -15,53 +15,57 @@ char* create_mainc_buffer () {
 	);
 }
 
-char* create_makefile_buffer (char* project_name) {
-	if (!project_name) return NULL;
+MstrView create_makefile_buffer (MVecParamDefPtr(*pool, char), char* project_name) {
+	if (!project_name) return EMPTYVIEW(MstrView);
 
-	return MPRINT_FMT_OUT(
+	return MStrFmt(pool,
 		"CC = gcc 										"NL
 		"CFLAGS = -Wall -Wextra -pedantic				"NL
 		".PHONY: all clean								"NL
+		NL
 		"all: "$(project_name)							 NL
 		$(project_name)": main.c 						"NL
 		"	$(CC) $(CFLAGS) main.c -o "$(project_name)	 NL
+		NL
 		"clean:											"NL
 		"	rm -f "$(project_name)						 NL
 	);
 }
 
-int main(int argc, char** argv) {
-    char* project_name = argv[1] ? argv[1] : nullptr;
-   	char* project_path = argv[2] ? argv[2] : nullptr;
-    char* path __free(charPtrFree) = NULL;
+int main(int argc, char** argv) { UNUSED(argc);
+	MVecAllocDefault(pool, char);
+    char* project_name = argv[1] ? argv[1] : NULL;
+   	char* project_path = argv[2] ? argv[2] : NULL;
+    MstrView path = {0};
 
     if (project_name)
-    	path = MPRINT_FMT_OUT($(project_path != NULL ? project_path : ".")"/"$(project_name));
+    	path = MStrFmt(&pool, $(project_path != NULL ? project_path : ".")"/"$(project_name));
     else {
-  		MPRINT_FMT("Ussage: <program-name> [project_path] <in_the_future: flags>");
+  		MPrintFmt("Ussage: <program-name> [project_path] <in_the_future: flags>");
     	return 1;
     }
 
-	catch(mfile_mkdir_path, &path, 0755) {
-		fprintf(stderr, "project: %s\n", unwrap_fail(path));
+	MRetEither(fcp, fcperr, mfile_mkdir_path(path, 0755)); 
+	if (fcperr) {
+		MPrintFmt("Create directory fail: "$(fcperr));
 		return 1;
 	}
-   	
-	char* out = NULL;	
-	char* makefile __free(charPtrFree) = create_makefile_buffer(project_name);
-	char* makefilePath __free(charPtrFree) = MPRINT_FMT_OUT($(path)"/makefile");
-	catch(mfile_create, &out, makefilePath, makefile) {
-		fprintf(stderr, "makefile: %s\n", unwrap_fail(out));
-		return 1;
-	};
 
-   	char* mainc __free(charPtrFree) = create_mainc_buffer();
-  	char* maincPath __free(charPtrFree) = MPRINT_FMT_OUT($(path)"/main.c");
-   	catch(mfile_create,	&out, maincPath, mainc) {
-   		fprintf(stderr, "main: %s\n", unwrap_fail(out));
-   		return 1;
-   	};
-   	
-	printf("Project at '%s' created successfully.\n", path);
+	MstrView cmk_path = MStrFmt(&pool, MstrViewFmt(path)"/makefile");
+	MstrView cmk_content = create_makefile_buffer(MVecParamRefPtr(&pool), project_name);
+	MRetEither(cmk, cmkfail, mfile_create(cmk_path, cmk_content));
+	if (cmkfail) {
+		MPrintFmt("Create makefile fail: "$(cmkfail));
+		return 1;
+	}
+
+    MstrView cmf_path = MStrFmt(&pool, MstrViewFmt(path)"/main.c");
+    MRetEither(cmf, cmffail, mfile_create(cmf_path, create_mainc_buffer(MVecParamRefPtr(&pool))));
+    if (cmffail) {
+    	MPrintFmt("Create makefile fail: "$(cmffail));
+		return 1;
+    }
+
+ 	MPrintFmt("Project at "MstrViewFmt(path)" created successfully.\n");
 	return 0;
 }

@@ -1,12 +1,20 @@
 #ifndef MSTRH
 #define MSTRH
-#include "mfile.h"
+#include "mvector.h"
 
-char* strndup(const char* s, size_t len) {
-    char* copy = malloc(len + 1);
-    if (!copy) return NULL;
+char *quick_strndup(const char *s, size_t n)
+{
+    size_t len = 0;
+    while (len < n && s[len] != '\0')
+        len++;
+
+    char *copy = (char *)malloc(len + 1);
+    if (!copy)
+        return NULL;
+
     memcpy(copy, s, len);
     copy[len] = '\0';
+
     return copy;
 }
 
@@ -15,108 +23,130 @@ typedef struct {
 	char raw[];
 } Mstr;
 
-int mstr_from_tryfail (Mstr** out, char* string) {
-	size_t len = strlen(string);
-	Mstr* mstrstring = malloc(sizeof(Mstr) + len);
-	if (!mstrstring) {
-		*(void**)(out) = strdup("mstr_from_fail alloc: buy more ram\n");
-		return 1;
-	}
-	*mstrstring = (Mstr) {
-		.length = len,
-	};
-	
-    memcpy(mstrstring->raw, string, len);
-	*out = mstrstring;
-	return 0;
+typedef struct {
+	size_t length;
+	char* raw;
+} MstrView;
+
+MstrView mstr_view_mstr(Mstr* string, size_t from) {
+    return ((MstrView) {
+        .length = string->length - from,
+        .raw = &string->raw[from]
+    });
 }
 
-void mstr_chop_r(Mstr* string, size_t n) {
-    if (n > string->length)
-        n = string->length;
-
-    string->length -= n;
+MstrView mstr_view_mstrview(MstrView string, size_t from) {
+    return ((MstrView) {
+        .length = string.length - from,
+        .raw = &string.raw[from]
+    });
 }
 
-void mstr_chop_l(Mstr* string, size_t n) {
-    if (n > string->length)
-        n = string->length;
-
-    memmove(
-        string->raw,
-        string->raw + n,
-        string->length - n
-    );
-
-    string->length -= n;
+MstrView mstr_view_string_len(char* string, size_t from, size_t length) {
+    return ((MstrView) {
+        .length = length - from,
+        .raw = &string[from]
+    });
 }
 
-void mstr_trim_left (Mstr* string) {
-	while(string->length > 0 && isspace(string->raw[0])) {
-		mstr_chop_l(string, 1);
-	}
+#define MstrViewFrom(string, ...) _Generic((string), \
+            Mstr*: mstr_view_mstr, \
+            MstrView: mstr_view_mstrview, \
+            char*: mstr_view_string_len\
+            ) (string, __VA_ARGS__)
+            
+MstrView mstr_trim_left(MstrView view) {
+    int count = 0;
+    while(view.raw[count] == ' ') count++;
+    return MstrViewFrom(view, count);
 }
 
-void mstr_trim_right (Mstr* string) {
-	while(string->length > 0 && isspace(string->raw[string->length -1])) {
-		mstr_chop_r(string, 1);	
-	}
+MstrView mstr_trim_right(MstrView view) {
+    int count = view.length;
+    while(view.raw[count - 1] == ' ') 
+        count--;
+        
+    return ((MstrView) {
+        .length = count > (int)view.length ? 0 : count,
+        .raw = view.raw
+    });
 }
 
-void mstr_trim (Mstr* string) {
-	mstr_trim_left(string);
-	mstr_trim_right(string);
+MstrView mstr_trim_view(MstrView view) {
+    MstrView new = mstr_trim_left(view);
+    new = mstr_trim_right(new);
+    return MstrViewFrom(new, 0);
 }
 
-Mstr* mstr_chop_by(Mstr* string, char delim) {
-	if (string->length <= 0) return NULL;
-	size_t i = 0;
-
-	while (i < string->length && string->raw[i] != delim)
-		i++;
-
-
-	Mstr* res = NULL;
-	char* copy = strndup(string->raw, string->length);
-	catch(mstr_from, &res, copy) {
-		return NULL;
-	}
-
-	if (i < string->length)
-		mstr_chop_r(res, res->length - i);
-	
-	if (i < string->length)
-		mstr_chop_l(string, i + 1);
-	else
-		mstr_chop_r(string, string->length);
-
-	free(copy);
-	return res;
+MstrView mstr_trim_mstr(Mstr* view) {
+    MstrView new = mstr_trim_left(MstrViewFrom(view, 0));
+    new = mstr_trim_right(new);
+    return MstrViewFrom(new, 0);
 }
 
-Mstr* mstr_chop_by_fun(Mstr* string, int (*fun)(int)) {
-	if (string->length <= 0) return NULL;
-	size_t i = 0;
+#define MstrTrim(string) \
+    _Generic((string), \
+        Mstr*: mstr_trim_mstr, \
+        MstrView: mstr_trim_view \
+    )(string)
 
-	while (i < string->length && !fun((unsigned char)string->raw[i]))
-		i++;
-
-	Mstr* res = NULL;
-	char* copy = strndup(string->raw, string->length);
-	catch(mstr_from, &res, copy) {
-		return NULL;
-	}
-
-	if (i < string->length)
-		mstr_chop_r(res, res->length - i);
-	
-	if (i < string->length)
-		mstr_chop_l(string, i + 1);
-	else
-		mstr_chop_r(string, string->length);
-
-	free(copy);
-	return res;
+bool MEOF(MstrView view) {
+	return view.raw == NULL;
 }
+
+#define EMPTYVIEW(type) \
+		_Generic(type, \
+			Mstr*: NULL,\
+			MstrView: ((MstrView) {\
+	            .length = 0,\
+	            .raw = NULL\
+	        })\
+	   	)
+        
+MstrView mstr_split_when_view(MstrView string, const char delim, MstrView* outView) {
+    if (string.raw == NULL) {
+        *outView = EMPTYVIEW(MstrView);
+        return EMPTYVIEW(MstrView);
+    }
+    
+    int count = 0;
+    while (count < (int)string.length && string.raw[count] != delim) {
+        count++;
+    }
+    
+    if (count >= (int)string.length) {
+        *outView = EMPTYVIEW(MstrView);
+        return MstrViewFrom(string, 0);
+    }
+    
+    *outView = MstrViewFrom(string, count + 1);
+    return ((MstrView){
+        .length = count,
+        .raw = string.raw
+    });
+}
+
+#define MstrSplitView(string, ...) \
+    mstr_split_when_view(_Generic((string), Mstr*: MstrViewFrom(string, 0), MstrView: string), __VA_ARGS__)
+    
+Mstr* mstr_string_from_pool(MVecParamDefPtr(*pool, char), const char* string) {
+    if (string == NULL) return EMPTYVIEW(Mstr*);
+    size_t str_len = strlen(string);
+    if (str_len == 0) return EMPTYVIEW(Mstr*);
+    
+    Mstr* ret = MVecPoolAlloc(MVecParamRefPtr(pool), sizeof(Mstr) + sizeof(char[str_len]));
+    if (ret == NULL) {
+        fprintf(stderr,"Not enough memory");
+        exit(1);
+        return NULL;
+    };
+    
+    *ret = ((Mstr){
+        .length = str_len
+    });
+    memcpy(ret->raw, string, str_len);
+    return ret;
+}
+#define MstrStringFromPool(pool, string) mstr_string_from_pool(MVecParamRefPtr(pool), string)
 
 #endif
