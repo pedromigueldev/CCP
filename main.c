@@ -1,8 +1,8 @@
 #include <stdbool.h>
-#include "vendor/mlib/mfile.h"
-#include "vendor/mlib/marr.h"
-#include "vendor/mlib/mstr.h"
-#include "vendor/mlib/mprint.h"
+#include "vendor/pers/mlib/mfile.h"
+#include "vendor/pers/mlib/marr.h"
+#include "vendor/pers/mlib/mview.h"
+#include "vendor/pers/mlib/mprint.h"
 
 #define NL "\n"
 #define NLNL NL NL
@@ -17,7 +17,7 @@ MstrView create_mainc_buffer (MByteArray** pool) {
 }
 
 MstrView create_makefile_buffer (MByteArray** pool, char* project_name) {
-	if (!project_name) return EMPTYVIEW;
+	if (!project_name) return MstrViewEmpty();
 
 	return MStrFmt(pool,
 		"CC = gcc"NL
@@ -46,20 +46,20 @@ int main(int argc, char** argv) { UNUSED(argc);
     }
 
 	MPrintFmt(MstrViewFmt(path));
-	if (IsEmptyView(MfileMkdir(path, 0755))) {
+	if (MstrViewIsEmpty(MfileMkdir(path, 0755))) {
 		MPrintFmt("Create directory fail: "$(strerror(errno)));
 		return 1;
 	}
 
 	MstrView cmk_path = MStrFmt(&pool, MstrViewFmt(path)"/makefile");
 	MstrView cmk_content = create_makefile_buffer(&pool, project_name);
-	if (IsEmptyView(MfileWrite(cmk_path, cmk_content))) {
+	if (MstrViewIsEmpty(MfileWrite(cmk_path, cmk_content))) {
 		MPrintFmt("Create makefile fail: "$(strerror(errno)));
 		return 1;
 	}
 
     MstrView cmf_path = MStrFmt(&pool, MstrViewFmt(path)"/main.c");
-    if (IsEmptyView(MfileWrite(cmf_path, create_mainc_buffer(&pool)))) {
+    if (MstrViewIsEmpty(MfileWrite(cmf_path, create_mainc_buffer(&pool)))) {
     	MPrintFmt("Create makefile fail: "$(strerror(errno)));
 		return 1;
     }
