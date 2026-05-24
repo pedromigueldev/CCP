@@ -1,11 +1,12 @@
 #include <stdbool.h>
 #include "vendor/mlib/mfile.h"
-#include "vendor/mlib/mvector.h"
+#include "vendor/mlib/marr.h"
 #include "vendor/mlib/mstr.h"
 #include "vendor/mlib/mprint.h"
 
 #define NL "\n"
-MstrView create_mainc_buffer (MVecParamDefPtr(*pool, char)) {
+#define NLNL NL NL
+MstrView create_mainc_buffer (MByteArray** pool) {
 	return MStrFmt(pool,
 		"#include <stdio.h>			"NL
 		"int main(void) {			"NL
@@ -15,25 +16,24 @@ MstrView create_mainc_buffer (MVecParamDefPtr(*pool, char)) {
 	);
 }
 
-MstrView create_makefile_buffer (MVecParamDefPtr(*pool, char), char* project_name) {
-	if (!project_name) return EMPTYVIEW(MstrView);
+MstrView create_makefile_buffer (MByteArray** pool, char* project_name) {
+	if (!project_name) return EMPTYVIEW;
 
 	return MStrFmt(pool,
-		"CC = gcc 										"NL
-		"CFLAGS = -Wall -Wextra -pedantic				"NL
-		".PHONY: all clean								"NL
-		NL
+		"CC = gcc"NL
+		"DEBUG_FLAGS     = -Wpedantic -g -Wall -Wextra -Wconversion -Wsign-conversion -fsanitize=address -fsanitize=undefined -fsanitize=leak -std=c11"NL
+		"CFLAGS          = $(DEBUG_FLAGS)"NLNL
+		".PHONY: all clean								"NLNL
 		"all: "$(project_name)							 NL
 		$(project_name)": main.c 						"NL
-		"	$(CC) $(CFLAGS) main.c -o "$(project_name)	 NL
-		NL
+		"	$(CC) $(CFLAGS) main.c -o "$(project_name)	 NLNL
 		"clean:											"NL
 		"	rm -f "$(project_name)						 NL
 	);
 }
 
 int main(int argc, char** argv) { UNUSED(argc);
-	MVecAllocDefault(pool, char);
+	__free(MByteArrayFree) MByteArray* pool = MByteArrayMalloc(400); 
     char* project_name = argv[1] ? argv[1] : NULL;
    	char* project_path = argv[2] ? argv[2] : NULL;
     MstrView path = {0};
@@ -45,24 +45,22 @@ int main(int argc, char** argv) { UNUSED(argc);
     	return 1;
     }
 
-	MRetEither(fcp, fcperr, mfile_mkdir_path(path, 0755)); 
-	if (fcperr) {
-		MPrintFmt("Create directory fail: "$(fcperr));
+	MPrintFmt(MstrViewFmt(path));
+	if (IsEmptyView(MfileMkdir(path, 0755))) {
+		MPrintFmt("Create directory fail: "$(strerror(errno)));
 		return 1;
 	}
 
 	MstrView cmk_path = MStrFmt(&pool, MstrViewFmt(path)"/makefile");
-	MstrView cmk_content = create_makefile_buffer(MVecParamRefPtr(&pool), project_name);
-	MRetEither(cmk, cmkfail, mfile_create(cmk_path, cmk_content));
-	if (cmkfail) {
-		MPrintFmt("Create makefile fail: "$(cmkfail));
+	MstrView cmk_content = create_makefile_buffer(&pool, project_name);
+	if (IsEmptyView(MfileWrite(cmk_path, cmk_content))) {
+		MPrintFmt("Create makefile fail: "$(strerror(errno)));
 		return 1;
 	}
 
     MstrView cmf_path = MStrFmt(&pool, MstrViewFmt(path)"/main.c");
-    MRetEither(cmf, cmffail, mfile_create(cmf_path, create_mainc_buffer(MVecParamRefPtr(&pool))));
-    if (cmffail) {
-    	MPrintFmt("Create makefile fail: "$(cmffail));
+    if (IsEmptyView(MfileWrite(cmf_path, create_mainc_buffer(&pool)))) {
+    	MPrintFmt("Create makefile fail: "$(strerror(errno)));
 		return 1;
     }
 

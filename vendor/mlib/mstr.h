@@ -1,7 +1,7 @@
 #ifndef MSTRH
 #define MSTRH
-#include "mvector.h"
-
+#include "marr.h"
+	   	
 char *quick_strndup(const char *s, size_t n)
 {
     size_t len = 0;
@@ -19,134 +19,78 @@ char *quick_strndup(const char *s, size_t n)
 }
 
 typedef struct {
-	size_t length;
-	char raw[];
-} Mstr;
-
-typedef struct {
-	size_t length;
-	char* raw;
+	size_t length, start;
+	MByteArray** raw;
 } MstrView;
 
-MstrView mstr_view_mstr(Mstr* string, size_t from) {
-    return ((MstrView) {
-        .length = string->length - from,
-        .raw = &string->raw[from]
-    });
+#define EMPTYVIEW ((MstrView) { .length = 0, .raw = NULL })
+#define IsEmptyView(x) ((x).raw == NULL)
+#define MViewRaw(x) ((*(x).raw)->raw + (x).start)
+
+MstrView MstrViewFromCstr(MByteArray** byteArr, char* string, size_t length) {
+    size_t from = (*byteArr)->len;
+
+    for (size_t i = 0; i < length; i++) {
+        *byteArr = MByteArrayPush(*byteArr, string[i]);
+    }
+
+    return (MstrView){
+        .start = from,
+        .length = length,
+        .raw = byteArr
+    };
 }
 
-MstrView mstr_view_mstrview(MstrView string, size_t from) {
-    return ((MstrView) {
-        .length = string.length - from,
-        .raw = &string.raw[from]
-    });
-}
-
-MstrView mstr_view_string_len(char* string, size_t from, size_t length) {
-    return ((MstrView) {
-        .length = length - from,
-        .raw = &string[from]
-    });
-}
-
-#define MstrViewFrom(string, ...) _Generic((string), \
-            Mstr*: mstr_view_mstr, \
-            MstrView: mstr_view_mstrview, \
-            char*: mstr_view_string_len\
-            ) (string, __VA_ARGS__)
-            
 MstrView mstr_trim_left(MstrView view) {
-    int count = 0;
-    while(view.raw[count] == ' ') count++;
-    return MstrViewFrom(view, count);
+    while (view.length > 0 && (*view.raw)->raw[view.start] == ' ') {
+        view.start++;
+        view.length--;
+    }
+    return view;
 }
 
 MstrView mstr_trim_right(MstrView view) {
-    int count = view.length;
-    while(view.raw[count - 1] == ' ') 
-        count--;
-        
-    return ((MstrView) {
-        .length = count > (int)view.length ? 0 : count,
-        .raw = view.raw
-    });
+    while (view.length > 0 && (*view.raw)->raw[view.start + view.length - 1] == ' ') {
+        view.length--;
+    }
+    return view;
 }
 
-MstrView mstr_trim_view(MstrView view) {
+MstrView MstrTrim(MstrView view) {
     MstrView new = mstr_trim_left(view);
     new = mstr_trim_right(new);
-    return MstrViewFrom(new, 0);
+    return new;
 }
-
-MstrView mstr_trim_mstr(Mstr* view) {
-    MstrView new = mstr_trim_left(MstrViewFrom(view, 0));
-    new = mstr_trim_right(new);
-    return MstrViewFrom(new, 0);
-}
-
-#define MstrTrim(string) \
-    _Generic((string), \
-        Mstr*: mstr_trim_mstr, \
-        MstrView: mstr_trim_view \
-    )(string)
-
-bool MEOF(MstrView view) {
-	return view.raw == NULL;
-}
-
-#define EMPTYVIEW(type) \
-		_Generic(type, \
-			Mstr*: NULL,\
-			MstrView: ((MstrView) {\
-	            .length = 0,\
-	            .raw = NULL\
-	        })\
-	   	)
         
-MstrView mstr_split_when_view(MstrView string, const char delim, MstrView* outView) {
-    if (string.raw == NULL) {
-        *outView = EMPTYVIEW(MstrView);
-        return EMPTYVIEW(MstrView);
+MstrView MstrSplitView(MstrView string, char delim, MstrView* outView) {
+    if (IsEmptyView(string)) {
+        *outView = EMPTYVIEW;
+        return EMPTYVIEW;
     }
-    
-    int count = 0;
-    while (count < (int)string.length && string.raw[count] != delim) {
+
+    size_t count = 0;
+
+    while (count < string.length &&
+           (*string.raw)->raw[string.start + count] != delim) {
         count++;
     }
-    
-    if (count >= (int)string.length) {
-        *outView = EMPTYVIEW(MstrView);
-        return MstrViewFrom(string, 0);
-    }
-    
-    *outView = MstrViewFrom(string, count + 1);
-    return ((MstrView){
-        .length = count,
-        .raw = string.raw
-    });
-}
 
-#define MstrSplitView(string, ...) \
-    mstr_split_when_view(_Generic((string), Mstr*: MstrViewFrom(string, 0), MstrView: string), __VA_ARGS__)
-    
-Mstr* mstr_string_from_pool(MVecParamDefPtr(*pool, char), const char* string) {
-    if (string == NULL) return EMPTYVIEW(Mstr*);
-    size_t str_len = strlen(string);
-    if (str_len == 0) return EMPTYVIEW(Mstr*);
-    
-    Mstr* ret = MVecPoolAlloc(MVecParamRefPtr(pool), sizeof(Mstr) + sizeof(char[str_len]));
-    if (ret == NULL) {
-        fprintf(stderr,"Not enough memory");
-        exit(1);
-        return NULL;
+    if (count == string.length) {
+        *outView = EMPTYVIEW;
+        return string;
+    }
+
+    *outView = (MstrView){
+        .raw = string.raw,
+        .start = string.start + count + 1,
+        .length = string.length - count - 1
     };
-    
-    *ret = ((Mstr){
-        .length = str_len
-    });
-    memcpy(ret->raw, string, str_len);
-    return ret;
+
+    return (MstrView){
+        .raw = string.raw,
+        .start = string.start,
+        .length = count
+    };
 }
-#define MstrStringFromPool(pool, string) mstr_string_from_pool(MVecParamRefPtr(pool), string)
 
 #endif
